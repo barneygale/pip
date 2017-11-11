@@ -306,10 +306,11 @@ that will enable installing pre-releases and development releases.
 VCS Support
 +++++++++++
 
-pip supports installing from Git, Mercurial, Subversion and Bazaar, and detects
-the type of VCS using url prefixes: "git+", "hg+", "bzr+", "svn+".
+pip supports installing from Git, Mercurial, Subversion, Bazaar and Perforce,
+and detects the type of VCS using url prefixes: "git+", "hg+", "bzr+", "svn+",
+"p4+".
 
-pip requires a working VCS command on your path: git, hg, svn, or bzr.
+pip requires a working VCS command on your path: git, hg, svn, or bzr, p4.
 
 VCS projects can be installed in :ref:`editable mode <editable-installs>` (using
 the :ref:`--editable <install_--editable>` option) or not.
@@ -429,6 +430,14 @@ Tags or revisions can be installed like so::
 
     [-e] bzr+https://bzr.example.com/MyProject/trunk@2019#egg=MyProject
     [-e] bzr+http://bzr.example.com/MyProject/trunk@v1.0#egg=MyProject
+
+Perforce
+~~~~~~~~
+
+pip supports Perforce using the ``p4+p4`` schemes. Here are some examples:
+
+    [-e] p4+p4://depot/myproject
+    [-e] p4+p4://depot/myproject@2019
 
 
 Finding Packages
