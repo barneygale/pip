@@ -24,9 +24,6 @@ class Perforce(VersionControl):
     repo_name = 'workspace'
     schemes = ('p4+p4',)
 
-    def __init__(self, url=None, *args, **kwargs):
-        super(Perforce, self).__init__(url, *args, **kwargs)
-
     def get_url_rev(self):
         url, rev = super(Perforce, self).get_url_rev()
 
