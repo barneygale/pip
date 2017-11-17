@@ -1,17 +1,21 @@
 from __future__ import absolute_import
 
+import getpass
 import logging
 import os
+import random
 import socket
+import string
 import sys
 
 from pip._internal.vcs import VersionControl, vcs
 
 logger = logging.getLogger(__name__)
 
+client_user = getpass.getuser()
 client_host = socket.gethostname()
-client_spec_copy_cmd = "copy" if sys.platform.startswith("win") else "cp"
 client_spec_template = """
+Owner:  {client_user}
 Host:   {client_host}
 Client: {client_name}
 Root:   {client_root}
@@ -49,26 +53,23 @@ class Perforce(VersionControl):
                 server_root += "@%s" % rev_options.rev
 
             # Set up client
-            client_name = os.path.basename(client_root)
-            client_spec = client_spec_template.format(
-                client_host=client_host,
-                client_name=client_name,
-                client_root=client_root,
-                server_root=server_root)
-            client_spec_path = os.path.join(dest, "client_spec.txt")
-            client_env = {
-                'P4CLIENT': client_name,
-                'P4EDITOR': "%s %s" % (client_spec_copy_cmd, client_spec_path)}
+            client_name = self.make_client_name()
+            client_spec_path = os.path.join(dest, "p4-client-spec.txt")
+
+            # Create temporary client specification
+            with open(client_spec_path, "w") as fd:
+                fd.write(self.make_client_spec(
+                    client_name,
+                    client_root,
+                    server_root))
 
             # Set up command-runner arguments
             command_args = dict(
                 cwd=dest,
-                extra_environ=client_env,
+                extra_environ=self.make_client_environ(
+                    client_name,
+                    client_spec_path),
                 show_stdout=False)
-
-            # Create temporary client specification
-            with open(client_spec_path, "w") as fd:
-                fd.write(client_spec)
 
             # Sync
             logger.info('Syncing "%s"', server_root)
@@ -76,8 +77,27 @@ class Perforce(VersionControl):
             self.run_command(cmd=['sync'], **command_args)
             self.run_command(cmd=['client', '-d', client_name], **command_args)
 
-            # Delete temporary client specification
-            os.unlink(client_spec_path)
+    @classmethod
+    def make_client_name(cls):
+        length = 32
+        charset = string.digits + string.ascii_lowercase
+        return "pip_" + "".join(random.choice(charset) for _ in range(length))
+
+    @classmethod
+    def make_client_spec(cls, client_name, client_root, server_root):
+        return client_spec_template.format(
+                client_user=client_user,
+                client_host=client_host,
+                client_name=client_name,
+                client_root=client_root,
+                server_root=server_root)
+
+    @classmethod
+    def make_client_environ(cls, client_name, client_spec_path):
+        cmd = "move" if sys.platform.startswith("win") else "mv"
+        return {
+            'P4CLIENT': client_name,
+            'P4EDITOR': "%s '%s'" % (cmd, client_spec_path)}
 
     @classmethod
     def controls_location(cls, location):
