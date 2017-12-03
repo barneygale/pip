@@ -12,128 +12,129 @@ from pip._internal.vcs import VersionControl, vcs
 
 logger = logging.getLogger(__name__)
 
-client_user = getpass.getuser()
-client_host = socket.gethostname()
 client_spec_template = """
-Owner:  {client_user}
-Host:   {client_host}
-Client: {client_name}
+Owner:  {user}
+Host:   {host}
+Client: {name}
 Root:   {client_root}
-View:   {server_root} //{client_name}/...
+View:   {server_root} //{name}/...
 """
 
 
 class Perforce(VersionControl):
     name = 'p4'
+    dirname = '.p4ignore'  # Not actually a directory.
     repo_name = 'workspace'
-    schemes = ('p4+p4',)
+    schemes = (
+        'p4+p4',
+        'p4+tcp',
+        'p4+tcp4',
+        'p4+tcp6',
+        'p4+tcp46',
+        'p4+tcp64',
+        'p4+ssl',
+        'p4+ssl4',
+        'p4+ssl6',
+        'p4+ssl46',
+        'p4+ssl64')
 
-    def get_url_rev(self):
-        url, rev = super(Perforce, self).get_url_rev()
+    @classmethod
+    def prepare_client(cls, client_root, server_root):
+        name = "pip_" + "".join(
+            random.choice(string.digits + string.ascii_lowercase)
+            for _ in range(32))
+        user = getpass.getuser()
+        host = socket.gethostname()
 
-        # Add recursive token to URL
-        if not url.endswith("/..."):
-            url = url.rstrip("/") + "/..."
+        # Write client spec
+        spec_path = os.path.join(client_root, ".p4spec")
+        with open(spec_path, "w") as fd:
+            fd.write(
+                client_spec_template.format(
+                    user=user,
+                    host=host,
+                    name=name,
+                    client_root=client_root,
+                    server_root=server_root))
 
-        return url, rev
+        # Write .p4ignore
+        with open(os.path.join(client_root, ".p4ignore"), "w") as fd:
+            fd.write("\n".join((".p4spec", ".p4ignore")))
+
+        # Build environment
+        environ = {
+            'P4CLIENT': name,
+            'P4EDITOR': "%s '%s'" % (
+                "move" if sys.platform.startswith("win") else "mv",
+                spec_path),
+            'P4IGNORE': '.p4ignore'
+        }
+
+        return name, environ
+
+    def get_port_path_rev(self):
+        url, rev = self.get_url_rev()
+        url_parts = url.split("//", 3)
+
+        # Build P4PORT
+        port = ""
+        if url_parts[0] != "p4:":
+            port += url_parts[0]
+        if len(url_parts) > 2:
+            port += url_parts[1]
+        if port == "":
+            port = os.environ.get("P4PORT", "")
+
+        # Build path
+        path = "//%s/..." % url_parts[-1]
+        if rev:
+            path += "@%s" % rev
+
+        return port, path, rev
 
     def obtain(self, dest):
-        url, rev = self.get_url_rev()
+        port, depot_path, rev = self.get_port_path_rev()
         rev_options = self.make_rev_options(rev)
-        if self.check_destination(dest, url, rev_options):
+        if self.check_destination(dest, None, rev_options):
 
             # Create directory
             if not os.path.exists(dest):
                 os.mkdir(dest)
 
-            # Set up client and server roots
-            client_root = dest
-            server_root = url.split("p4:")[1]
-            if rev_options.rev:
-                server_root += "@%s" % rev_options.rev
-
-            # Set up client
-            client_name = self.make_client_name()
-            client_spec_path = os.path.join(dest, "p4-client-spec.txt")
-
-            # Create temporary client specification
-            with open(client_spec_path, "w") as fd:
-                fd.write(self.make_client_spec(
-                    client_name,
-                    client_root,
-                    server_root))
-
-            # Set up command-runner arguments
+            client_name, client_environ = self.prepare_client(dest, depot_path)
             command_args = dict(
                 cwd=dest,
-                extra_environ=self.make_client_environ(
-                    client_name,
-                    client_spec_path),
+                extra_environ=client_environ,
                 show_stdout=False)
 
             # Sync
-            logger.info('Syncing "%s"', server_root)
+            logger.info('Syncing "%s"', depot_path)
             self.run_command(cmd=['client'], **command_args)
             self.run_command(cmd=['sync'], **command_args)
             self.run_command(cmd=['client', '-d', client_name], **command_args)
 
-    @classmethod
-    def make_client_name(cls):
-        length = 32
-        charset = string.digits + string.ascii_lowercase
-        return "pip_" + "".join(random.choice(charset) for _ in range(length))
-
-    @classmethod
-    def make_client_spec(cls, client_name, client_root, server_root):
-        return client_spec_template.format(
-                client_user=client_user,
-                client_host=client_host,
-                client_name=client_name,
-                client_root=client_root,
-                server_root=server_root)
-
-    @classmethod
-    def make_client_environ(cls, client_name, client_spec_path):
-        cmd = "move" if sys.platform.startswith("win") else "mv"
-        return {
-            'P4CLIENT': client_name,
-            'P4EDITOR': "%s '%s'" % (cmd, client_spec_path)}
-
-    @classmethod
-    def controls_location(cls, location):
-        # No straightforward way to determine this, so always return False.
-        return False
-
     def is_commit_id_equal(self, dest, name):
-        # Never called due to controls_location() returning False
         raise NotImplementedError
 
     def get_src_requirement(self, dist, location):
-        # Never called due to controls_location() returning False
         raise NotImplementedError
 
     def update(self, dest, rev_options):
-        # Never called due to controls_location() returning False
         raise NotImplementedError
 
     def switch(self, dest, url, rev_options):
-        # Never called due to controls_location() returning False
         raise NotImplementedError
 
     def get_base_rev_args(self, rev):
-        # Never called because we don't implement switch()
         raise NotImplementedError
 
     def get_url(self, location):
-        # Never called because we don't call get_info()
         raise NotImplementedError
 
     def get_revision(self, location):
-        # Never called because we don't call get_info()
         raise NotImplementedError
 
     def export(self, location):
-        # Not possible with perforce
         raise NotImplementedError
 
 
