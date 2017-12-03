@@ -12,8 +12,8 @@ from pip._internal.status_codes import ERROR
 from pip._internal.utils.misc import rmtree
 from tests.lib import (
     _create_svn_repo, _create_test_package, create_test_package_with_setup,
-    need_bzr, need_mercurial, path_to_url, pyversion, pyversion_tuple,
-    requirements_file,
+    need_bzr, need_mercurial, needs_perforce, path_to_url, pyversion,
+    pyversion_tuple, requirements_file
 )
 from tests.lib.local_repos import local_checkout
 from tests.lib.path import Path
@@ -1282,3 +1282,11 @@ def test_installed_files_recorded_in_deterministic_order(script, data):
         p for p in Path(installed_files_path).read_text().split('\n') if p
     ]
     assert installed_files_lines == sorted(installed_files_lines)
+
+@need_perforce
+def test_install_from_perforce(script, tmpdir, perforce_server):
+    """Test checking out from Perforce."""
+    pkg_path = _create_test_package(script, name='testpackage', vcs='p4')
+    args = ['install', '-e', 'p4+p4://depot/pip-test-package#egg=testpackage']
+    result = script.pip(*args, **{"expect_error": True})
+    result.assert_installed('testpackage', with_files=['.p4ignore'])
