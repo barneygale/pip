@@ -260,3 +260,16 @@ class InMemoryPip(object):
 @pytest.fixture
 def in_memory_pip():
     return InMemoryPip()
+
+@pytest.yield_fixture(scope="session")
+def perforce_server(tmpdir_factory):
+    port = 'localhost:1666'
+    tmpdir = tmpdir_factory.mktemp('perforce-server')
+    subprocess.check_call([
+        'p4d',
+        '-d',
+        '-p', port,
+        '-r', str(tmpdir)
+    ])
+    yield
+    subprocess.check_call(['p4', '-p', port, 'admin', 'stop'])

@@ -596,6 +596,18 @@ def _vcs_add(script, version_pkg_path, vcs='git'):
             '--author', 'pip <pypa-dev@googlegroups.com>',
             '-m', 'initial version', cwd=version_pkg_path,
         )
+    elif vcs == 'p4':
+        from pip._internal.vcs.perforce import Perforce
+        client_name, client_environ = Perforce.prepare_client(
+            version_pkg_path, "//depot/pip-test-package/...")
+        cwd = version_pkg_path
+
+        script.environ.update(client_environ)
+        script.environ['P4PORT'] = 'localhost:1666'
+        script.run('p4', 'client', cwd=cwd),
+        script.run('p4', 'add', '//...', cwd=cwd),
+        script.run('p4', 'submit', '-d', 'initial version', cwd=cwd),
+        script.run('p4', 'client', '-d', client_name, cwd=cwd),
     else:
         raise ValueError('Unknown vcs: %r' % vcs)
     return version_pkg_path
@@ -772,4 +784,10 @@ def need_bzr(fn):
 def need_mercurial(fn):
     return pytest.mark.mercurial(need_executable(
         'Mercurial', ('hg', 'version')
+    )(fn))
+
+
+def need_perforce(fn):
+    return pytest.mark.perforce(need_executable(
+        'Perforce', ('p4', '-V')
     )(fn))
