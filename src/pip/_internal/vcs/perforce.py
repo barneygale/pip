@@ -102,6 +102,7 @@ class Perforce(VersionControl):
                 os.mkdir(dest)
 
             client_name, client_environ = self.prepare_client(dest, depot_path)
+            client_environ['P4PORT'] = port
             command_args = dict(
                 cwd=dest,
                 extra_environ=client_environ,
